@@ -1,5 +1,6 @@
 from sentence_transformers import SentenceTransformer, util
 import streamlit as st
+import os
 
 @st.cache_data
 def load_model():
@@ -8,7 +9,41 @@ def load_model():
 # Use model
 model = load_model()
 
-def similarity(key):
+file_name = {}
+file_url = {}
+
+# List all file in docs folder
+# then read all text file
+# return to dictionary
+def read_file():
+  conn = st.connection("postgresql", type="sql")
+  df = conn.query('SELECT * FROM github;', ttl="0")
+
+  file_dict = {}
+  for row in df.itertuples():
+
+    file_url[row.id] = row.url
+    file_name[row.id] = row.name
+
+    with open(row.path, 'r') as f:
+      file_dict[row.id] = f.read()
+  return file_dict
+
+# loop file_dict from read_file() function
+# print all file name
+# then print all file content
+def show_file(files):
+  for file in files:
+    st.write(file)
+
+def similarity(key, files):
+
+  # turn dictionary to list
+  sentences = list(files.values())
+
+  if len(sentences) <= 0:
+    st.error('No file uploaded')
+    return
   
   #Encode all sentences
   embeddings = model.encode(sentences)
@@ -20,31 +55,20 @@ def similarity(key):
 
   all_sentence_combinations = []
   for i in range(len(cos_sim)):
-    all_sentence_combinations.append([cos_sim[i], i])
+    all_sentence_combinations.append([cos_sim[i], i, ])
 
   #Sort list by the highest cosine similarity score
   all_sentence_combinations = sorted(all_sentence_combinations, key=lambda x: x[0], reverse=True)
 
   print("Top-5 most similar pairs:")
   for score, i in all_sentence_combinations[0:5]:
-    st.write("{} \t {}".format(cos_sim[i], sentences[i]))
+    st.markdown("[{}]({})".format(file_name[list(files.keys())[i]], file_url[list(files.keys())[i]]))
 
 st.subheader('Raw data')
+# show_file(files)
 
 key = st.text_input('Keyword')
 
-# Sentence example
-sentences = [
-          'A man is eating a piece of bread.',
-          'The girl is carrying a baby.',
-          'A man is riding a horse.',
-          'A woman is playing violin.',
-          'Two men pushed carts through the woods.',
-          'A man is riding a white horse on an enclosed ground.',
-          'A monkey is playing drums.'
-          ]
-
-st.write(sentences)
-
 if key:
-  similarity(key)
+  files = read_file()
+  similarity(key, files)
